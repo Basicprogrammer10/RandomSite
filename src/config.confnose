@@ -1,2 +1,5 @@
-database = "sites.db"
+database = "data.db"
 tableName = "site"
+
+seedUri = "https://en.wikipedia.org/wiki/Main_Page"
+seedItarations = "1"

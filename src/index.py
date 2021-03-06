@@ -1,23 +1,16 @@
-import sqlite3
+import sqlite3, requests,  os, re
 from datetime import datetime
-import os
-import re
+
+from requests.models import Response
 ############ VARS ############
 configFile = 'config.confnose'
 DEBUG = True
 
-initialise = {}
-toImport  =  {}
-########### SETUP ###########
-for i in toImport:
-    defult = False if toImport[i] != '' else True
-    exec(str('from ' if defult == False else 'import ')+str(i)+str(' import ' + toImport[i] if defult == False else ''))
+######### FUNCTIONS #########
 def colored(text, color):
     ColorCodes = {'black':'30','red':'31','yellow':'33','green':'32','blue':'34','cyan':'36','magenta':'35','white':'37','gray':'90','reset':'0'}
     return '\033[' + ColorCodes[str(color).lower()] + 'm' + str(text) + "\033[0m"
-for i in initialise:
-    exec(i + '=' + initialise[i])
-######### FUNCTIONS #########
+
 class config():
     def read(file):
         DebugPrint('Config','Parseing Config File', 'cyan')
@@ -45,18 +38,51 @@ def DebugPrint(Catagory,Text,Color):
 
 def cls(): os.system('cls' if os.name=='nt' else 'clear')
 
-def connectDB(db):
-    DebugPrint('Database', 'Connecting to ' + colored(db, 'blue'), 'cyan')
-    db = sqlite3.connect('sites.db')
+def connectDB(database):
+    DebugPrint('Database', 'Connecting to ' + colored(database, 'blue'), 'cyan')
+    db = sqlite3.connect(database)
     DebugPrint('Database', 'Connection Successfull', 'green')
-    DebugPrint('Database', 'Createing Table: ' + colored(config.get('tableName'), 'blue'), 'cyan')
-    db.execute("CREATE TABLE IF NOT EXISTS " + config.get('tableName') + " (url TEXT)")
-    DebugPrint('Database', 'Table creation Successfull', 'green')
+
+    table = db.cursor()
+    table.execute('SELECT count(name) FROM sqlite_master WHERE type=\'table\' AND name=\'' + config.get('tableName') + '\'')
+
+    if table.fetchone()[0] != 1:
+        DebugPrint('Database', 'Createing Table: ' + colored(config.get('tableName'), 'blue'), 'cyan')
+        db.execute("CREATE TABLE IF NOT EXISTS " + config.get('tableName') + " (url TEXT, done INT)")
+        db.execute("INSERT INTO " + config.get('tableName') + " (url, done) values (" + config.get('seedUri') + ",0)")
+        DebugPrint('Database', 'Table creation Successfull', 'green')
+
+    return db
+
+def getDbData(db):
+    cursor = db.execute("SELECT * FROM " + config.get('tableName'))
+    rows = cursor.fetchall()
+    return rows
+
+def requestSite(url):
+    DebugPrint('Request', 'Fetching ' + colored(url, 'blue'), 'cyan')
+    responce = requests.get(url)
+    if not responce.status_code == 200:
+        DebugPrint('Request', 'Error ' + colored(str(responce.status_code)), 'red')
+        return None
+    DebugPrint('Request', 'Sucess ' + colored('[' + str(int(responce.elapsed.total_seconds() * 1000)) + ' ms]', 'blue'), 'green')
+    return responce.content
+
+def goThroughDatabase(sites):
+    for i in sites:
+        if i[1] == 1: return
+        requestSite(i[0])
+
 ####### MAIN FUNCTION #######
 def main():
     DebugPrint('Main', 'Starting...', 'green')
     config.read(configFile)
-    connectDB(config.get('database'))
+    db = connectDB(config.get('database'))
+
+    db.execute("INSERT INTO " + config.get('tableName') + " (url, done) values (" + config.get('seedUri') + ",0)")
+
+    for i in range(int(config.get('seedItarations'))):
+        goThroughDatabase(getDbData(db))
     DebugPrint('Main', 'Finished...', 'red')
 if __name__ == "__main__":
     main()
