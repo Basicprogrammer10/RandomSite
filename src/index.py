@@ -1,4 +1,5 @@
-import sqlite3, requests,  os, re
+import sqlite3, requests,  os, re, validators
+from bs4 import BeautifulSoup
 from datetime import datetime
 
 from requests.models import Response
@@ -50,6 +51,7 @@ def connectDB(database):
         DebugPrint('Database', 'Createing Table: ' + colored(config.get('tableName'), 'blue'), 'cyan')
         db.execute("CREATE TABLE IF NOT EXISTS " + config.get('tableName') + " (url TEXT, done INT)")
         db.execute("INSERT INTO " + config.get('tableName') + " (url, done) values (" + config.get('seedUri') + ",0)")
+        db.commit()
         DebugPrint('Database', 'Table creation Successfull', 'green')
 
     return db
@@ -66,23 +68,48 @@ def requestSite(url):
         DebugPrint('Request', 'Error ' + colored(str(responce.status_code)), 'red')
         return None
     DebugPrint('Request', 'Sucess ' + colored('[' + str(int(responce.elapsed.total_seconds() * 1000)) + ' ms]', 'blue'), 'green')
-    return responce.content
+    return responce.text
 
-def goThroughDatabase(sites):
+def inDatabase(url, db):
+    c = db.cursor()
+    c.execute("SELECT EXISTS(SELECT 1 FROM " + config.get('tableName') + " WHERE url=\"" + url + "\" LIMIT 1)")
+    if c.fetchone()[0] == 1:
+        return True
+    return False
+
+def tryAddDatabase(url, db):
+    if inDatabase(url, db):
+        return
+    db.execute("INSERT INTO " + config.get('tableName') + " (url, done) values (\"" + url + "\",0)")
+
+def goThroughDatabase(sites, db):
     for i in sites:
         if i[1] == 1: return
-        requestSite(i[0])
+        findLinks(requestSite(i[0]), i[0], db)
+        c = db.cursor()
+        c.execute("UPDATE " + config.get('tableName') + " SET done=1 WHERE url=\"" + i[0] + "\"")
+        db.commit()
+
+def findLinks(data, base, db):
+    DebugPrint('Parseing', 'Finding Links', 'cyan')
+    soup = BeautifulSoup(data, 'html.parser')
+    links = soup.find_all('a')
+    for link in links:
+        link = str(link.get('href'))
+        if validators.url(link):
+            tryAddDatabase(link, db)
+            continue
+        if validators.url(base + link):
+            tryAddDatabase(base + link, db)
+    DebugPrint('Parseing', 'Done! ' + colored(str(len(links)) + ' Links', 'blue'), 'green')
 
 ####### MAIN FUNCTION #######
 def main():
     DebugPrint('Main', 'Starting...', 'green')
     config.read(configFile)
     db = connectDB(config.get('database'))
-
-    db.execute("INSERT INTO " + config.get('tableName') + " (url, done) values (" + config.get('seedUri') + ",0)")
-
     for i in range(int(config.get('seedItarations'))):
-        goThroughDatabase(getDbData(db))
+        goThroughDatabase(getDbData(db), db)
     DebugPrint('Main', 'Finished...', 'red')
 if __name__ == "__main__":
     main()
