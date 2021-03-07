@@ -1,6 +1,7 @@
 import sqlite3, requests,  os, re, validators
 from bs4 import BeautifulSoup
 from datetime import datetime
+from urllib.parse import urlparse
 
 from requests.models import Response
 ############ VARS ############
@@ -63,12 +64,14 @@ def getDbData(db):
 
 def requestSite(url):
     DebugPrint('Request', 'Fetching ' + colored(url, 'blue'), 'cyan')
-    responce = requests.get(url)
-    if not responce.status_code == 200:
-        DebugPrint('Request', 'Error ' + colored(str(responce.status_code)), 'red')
-        return None
-    DebugPrint('Request', 'Sucess ' + colored('[' + str(int(responce.elapsed.total_seconds() * 1000)) + ' ms]', 'blue'), 'green')
-    return responce.text
+    try:
+        responce = requests.get(url)
+        if not responce.status_code == 200:
+            DebugPrint('Request', 'Error ' + colored(str(responce.status_code), 'blue'), 'red')
+            return None
+        DebugPrint('Request', 'Sucess ' + colored('[' + str(int(responce.elapsed.total_seconds() * 1000)) + ' ms]', 'blue'), 'green')
+        return responce.text
+    except: return None 
 
 def inDatabase(url, db):
     c = db.cursor()
@@ -82,26 +85,32 @@ def tryAddDatabase(url, db):
         return
     db.execute("INSERT INTO " + config.get('tableName') + " (url, done) values (\"" + url + "\",0)")
 
-def goThroughDatabase(sites, db):
-    for i in sites:
-        if i[1] == 1: return
-        findLinks(requestSite(i[0]), i[0], db)
+def goThroughDatabase(db):
+    for i in getDbData(db):
+        if i[1] == 1: continue
+        base = urlparse(i[0]).netloc
+        findLinks(requestSite(i[0]), base, db)
         c = db.cursor()
         c.execute("UPDATE " + config.get('tableName') + " SET done=1 WHERE url=\"" + i[0] + "\"")
         db.commit()
 
 def findLinks(data, base, db):
     DebugPrint('Parseing', 'Finding Links', 'cyan')
-    soup = BeautifulSoup(data, 'html.parser')
-    links = soup.find_all('a')
-    for link in links:
-        link = str(link.get('href'))
-        if validators.url(link):
-            tryAddDatabase(link, db)
-            continue
-        if validators.url(base + link):
-            tryAddDatabase(base + link, db)
-    DebugPrint('Parseing', 'Done! ' + colored(str(len(links)) + ' Links', 'blue'), 'green')
+    num = 0
+    try:
+        soup = BeautifulSoup(data, 'html.parser')
+        links = soup.find_all('a')
+        for link in links:
+            link = str(link.get('href'))
+            if validators.url(link):
+                num += 1
+                tryAddDatabase(link, db)
+                continue
+            if validators.url(base + link):
+                num += 1
+                tryAddDatabase(base + link, db)
+    except: pass
+    DebugPrint('Parseing', 'Done! ' + colored(str(num) + ' Links', 'blue'), 'green')
 
 ####### MAIN FUNCTION #######
 def main():
@@ -109,7 +118,7 @@ def main():
     config.read(configFile)
     db = connectDB(config.get('database'))
     for i in range(int(config.get('seedItarations'))):
-        goThroughDatabase(getDbData(db), db)
+        goThroughDatabase(db)
     DebugPrint('Main', 'Finished...', 'red')
 if __name__ == "__main__":
     main()
