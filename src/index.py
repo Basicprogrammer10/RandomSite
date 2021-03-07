@@ -2,8 +2,8 @@ import sqlite3, requests,  os, re, validators
 from bs4 import BeautifulSoup
 from datetime import datetime
 from urllib.parse import urlparse
-
 from requests.models import Response
+
 ############ VARS ############
 configFile = 'config.confnose'
 DEBUG = True
@@ -29,7 +29,6 @@ class config():
                 final[working[0]] = working[1]
         DebugPrint('Config','Config File Parsed Successfully', 'green')
         config.configFileData = final
-        
 
     def get(Thing):
         return config.configFileData[Thing]
@@ -65,7 +64,7 @@ def getDbData(db):
 def requestSite(url):
     DebugPrint('Request', 'Fetching ' + colored(url, 'blue'), 'cyan')
     try:
-        responce = requests.get(url)
+        responce = requests.get(url, timeout=int(config.get('timeout')))
         if not responce.status_code == 200:
             DebugPrint('Request', 'Error ' + colored(str(responce.status_code), 'blue'), 'red')
             return None
@@ -120,5 +119,6 @@ def main():
     for i in range(int(config.get('seedItarations'))):
         goThroughDatabase(db)
     DebugPrint('Main', 'Finished...', 'red')
+    
 if __name__ == "__main__":
     main()

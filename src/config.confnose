@@ -2,4 +2,5 @@ database = "data.db"
 tableName = "site"
 
 seedUri = "https://en.wikipedia.org/wiki/Main_Page"
-seedItarations = "100"
+seedItarations = "10000"
+timeout = "10"
